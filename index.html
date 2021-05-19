@@ -1,1 +1,111 @@
-<h1>Split PDF</h1>
+<!DOCTYPE html>
+<html>
+ 
+<head>
+    <title>Split PDF</title>
+    <meta charset="utf-8" />
+    <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.4.0/dist/pdf-lib.min.js"></script>
+    <script src="https://unpkg.com/downloadjs@1.4.7"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.0/FileSaver.min.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.6.0/jszip.min.js"></script>
+</head>
+ 
+<body>
+	<div class="content">
+	<h1>Split PDF by Size</h1>
+
+	<p>
+		<input type="text" id="name" name="name" placeholder="Output File Name" class="text"><br>
+		<input type="text" id="size" name="size" placeholder="Max Size (mb) (Integer >= 1)" class="text"><br>
+		<input type="file" id="file" onchange="Filevalidation()" />
+		<h2 class="process" id="process">Processing...</h2>
+	</p>
+	</div>
+</body>
+
+<style>
+	.content {
+		text-align: center;
+	}
+	.text {
+		width: 250px;
+	}
+	.process {
+		display: none;
+	}
+</style>
+ 
+<script>
+	const { PDFDocument } = PDFLib;
+	let numberPdfs = 1;
+
+	async function divideBy2(pdf, total, maxSize, prefix, zip) {
+		const left = Math.floor(total/2);
+		const right = Math.floor(total/2);
+
+		const pdf1 = await PDFDocument.create();
+		for (let j = 0; j < left; j++) {
+			const [temp_] = await pdf1.copyPages(pdf, [j])
+			pdf1.addPage(temp_)
+		}
+
+		const pdf2 = await PDFDocument.create();
+		for (j = right; j < total; j++) {
+			const [temp_] = await pdf2.copyPages(pdf, [j])
+			pdf2.addPage(temp_)
+		}	
+
+		let pdfBytes = await pdf1.save();
+
+		if (pdfBytes.length > maxSize) {
+			await divideBy2(pdf1, pdf1.getPageCount(), maxSize, prefix, zip);
+		} else {
+			//download(pdfBytes, prefix + "_" + numberPdfs + ".pdf", "application/pdf");
+			zip.file(prefix + "_" + numberPdfs + ".pdf", pdfBytes);
+			numberPdfs += 1;
+		}
+
+		pdfBytes = await pdf2.save();
+		if (pdfBytes.length > maxSize) {
+			await divideBy2(pdf2, pdf2.getPageCount(), maxSize, prefix, zip);
+		} else {
+			//download(pdfBytes, prefix + "_" + numberPdfs + ".pdf", "application/pdf");
+			zip.file(prefix + "_" + numberPdfs + ".pdf", pdfBytes);
+			numberPdfs += 1;
+		}    
+	}
+
+	async function Filevalidation() {
+		var zip = new JSZip();
+
+		document.getElementById("process").style.display = "block";
+		numberPdfs = 1;
+		const text = document.getElementById('name').value.toString();
+		const maxSize = document.getElementById('size').value.toString() * 1024000;
+		const file = document.getElementById('file');
+
+		// Check if any file is selected.
+		if (file.files.length < 1) return;
+		for (let i = 0; i <= file.files.length - 1; i++) {
+			let fsize = file.files.item(i).size;
+			fsize = Math.round((fsize / 1024));
+
+			var reader = new FileReader();
+			reader.onload = async function() {
+				const pdfDoc = await PDFDocument.load(reader.result);
+				const total = pdfDoc.getPageCount();
+				await divideBy2(pdfDoc, total, maxSize, text, zip);
+				await zip.generateAsync({type:"blob"}).then(function (blob) {
+					saveAs(blob, "output.zip");
+				});
+				document.getElementById("process").style.display = "none";
+				document.getElementById("name").value = "";
+				document.getElementById("size").value = "";
+				document.getElementById("file").value = "";
+			}
+			reader.readAsArrayBuffer(file.files[0]);
+		}
+	}
+</script>
+ 
+</html>
